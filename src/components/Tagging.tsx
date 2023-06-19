@@ -3,18 +3,21 @@ import { socket } from '../socket';
 import { InputAdornment, TextField } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { useEffect, useState } from 'react'
-// import { forwardRef } from "react";
-
+import { useEffect, useRef, useState } from 'react'
 const Tagging = (
 	props: any
 ) => {
-    const [messages, setMessages] = useState<any[]>([])
+	const [messages, setMessages] = useState<any[]>([])
 	const [, setIsConnected] = useState(socket.connected);
 	const [messageText, setMessageText] = useState('');
 	const [join, setJoin] = useState(Boolean(false));
 	const [name, setName] = useState('');
 	const [startTime, setStartTime] = useState(0);
+	const [allowEdit, setAllowEdit] = useState(false);
+	let mediaRecorder: MediaRecorder | null;
+	let recordedChunks: BlobPart[] = [];
+
+	// const playerRef = useRef(null);
 	const roomId = props.stream_id;
 
 	useEffect(() => {
@@ -83,6 +86,39 @@ const Tagging = (
 		socket.emit('removeTagging', {id: id});
 	}
 
+	const startRecording = () => {
+    mediaRecorder = new MediaRecorder(props.videoRef.current.getInternalPlayer().srcObject);
+
+    mediaRecorder.addEventListener('dataavailable', (event) => {
+      if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    });
+
+    mediaRecorder.start();
+  };
+
+
+	const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      mediaRecorder = null;
+
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+
+			console.log(blob);
+
+      recordedChunks = [];
+
+      // Send `blob` to the backend
+      // Make an API call to send the recorded audio to the backend
+    } else {
+      console.log('Recording not started');
+    }
+  };
+
+	
+
 	return (
 		<>
 			<div>
@@ -130,23 +166,22 @@ const Tagging = (
 										return (
 											<div className="tag-container" onMouseOver={() => {}}>
 												<TextField id="standard-basic"
-												value={message.content}
+												// value={`[${timestamp}]: ${message.content}`}
+												defaultValue={`[${timestamp}]: ${message.content}`}
 												fullWidth={true}
-												inputProps={{
-													readOnly: true,
-												}}
+												multiline={true}
 												InputProps={{
 													endAdornment: (
 													<>
 														<InputAdornment position="end">
 															<EditIcon color="primary" onClick={() => {
-																message.content = message.content + " edited";
-																editMessage(message);
-																setMessages([...messages]);
+																setAllowEdit(true);
+																// message.content = message.content + " edited";
+																// editMessage(message);
+																// setMessages([...messages]);
 															}}
 															sx={{
 																cursor: 'pointer',
-																visibility: 'hidden'
 															}}
 															>
 															</EditIcon>
@@ -159,7 +194,6 @@ const Tagging = (
 															}} 
 															sx={{
 																cursor: 'pointer',
-																visibility: 'hidden'
 															}}
 															>
 															</DeleteIcon>
@@ -167,11 +201,26 @@ const Tagging = (
 													</>
 													),
 												}}
+												inputProps={{
+													readOnly: !allowEdit,
+													style: { color: "white" },
+												}}
 												sx={{
 													input: {
 														color: 'white'
 													},
 													"& fieldset": { border: 'none' },
+												}}
+												onChange={(e: any) => {
+ 													message.content = e.target.value;
+												}}
+												onKeyDown={(e: any) => {
+													if (e.key === 'Enter' && e.shiftKey) {
+														message.content += "\n";
+														// setAllowEdit(false);
+													} else if (e.key === 'Enter') {
+														setAllowEdit(false);
+													}
 												}}
 												/>
 											</div>
@@ -236,6 +285,8 @@ const Tagging = (
 									}
 								}>Download</button>
 						</div>
+						<button onClick={startRecording}>Start Recording</button>
+						<button onClick={stopRecording}>Stop Recording</button>
 					</div> : null
 				}
 			</div>
